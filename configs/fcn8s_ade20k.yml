@@ -1,0 +1,25 @@
+model:
+    arch: fcn8s
+data:
+    dataset: ade20k
+    path: /home/olorin/datasets/ADE20K_2016_07_26/
+    train_split: training
+    val_split: validation
+    img_rows: 512
+    img_cols: 512
+training:
+    train_iters: 2000 #300000
+    batch_size: 1
+    val_interval: 100 #1000
+    n_workers: 8
+    print_interval: 50
+    optimizer:
+        name: 'sgd'
+        lr: 1.0e-10
+        weight_decay: 0.0005
+        momentum: 0.99
+    loss:
+        name: 'cross_entropy'
+        size_average: False
+    lr_schedule:
+    resume:

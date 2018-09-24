@@ -37,6 +37,7 @@ def train(cfg, writer, logger):
 
     # Setup device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    #device = torch.device("cpu")
 
     # Setup Augmentations
     augmentations = cfg['training'].get('augmentations', None)
@@ -75,7 +76,7 @@ def train(cfg, writer, logger):
     # Setup Model
     model = get_model(cfg['model'], n_classes).to(device)
 
-    model = torch.nn.DataParallel(model, device_ids=range(torch.cuda.device_count()))
+    #model = torch.nn.DataParallel(model, device_ids=range(torch.cuda.device_count()))
 
     # Setup optimizer, lr_scheduler and loss function
     optimizer_cls = get_optimizer(cfg)
@@ -119,6 +120,7 @@ def train(cfg, writer, logger):
     while i <= cfg['training']['train_iters'] and flag:
         for (images, labels) in trainloader:
             i += 1
+            logger.info("Iteration {}".format(i))
             start_ts = time.time()
             scheduler.step()
             model.train()
@@ -126,8 +128,12 @@ def train(cfg, writer, logger):
             labels = labels.to(device)
 
             optimizer.zero_grad()
+            #logger.info(model)
+            #logger.info(images.size())
             outputs = model(images)
 
+            #logger.info('outputs: {}'.format(outputs.size()))
+            #logger.info('labels: {}'.format(labels.size()))
             loss = loss_fn(input=outputs, target=labels)
 
             loss.backward()

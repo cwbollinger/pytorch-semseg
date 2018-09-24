@@ -35,7 +35,7 @@ class ADE20KLoader(data.Dataset):
 
         for split in ["training", "validation"]:
             file_list = recursive_glob(
-                rootdir=self.root + "images/" + self.split + "/", suffix=".jpg"
+                rootdir=self.root + 'images/' + self.split + '/', suffix='.jpg'
             )
             self.files[split] = file_list
 
@@ -46,11 +46,13 @@ class ADE20KLoader(data.Dataset):
         img_path = self.files[self.split][index].rstrip()
         lbl_path = img_path[:-4] + "_seg.png"
 
-        img = m.imread(img_path)
+        img = m.imread(img_path, mode='RGB')
         img = np.array(img, dtype=np.uint8)
 
         lbl = m.imread(lbl_path)
         lbl = np.array(lbl, dtype=np.int32)
+
+        lbl = self.encode_segmap(lbl)
 
         if self.augmentations is not None:
             img, lbl = self.augmentations(img, lbl)
@@ -74,23 +76,42 @@ class ADE20KLoader(data.Dataset):
         # NHWC -> NCHW
         img = img.transpose(2, 0, 1)
 
-        lbl = self.encode_segmap(lbl)
         classes = np.unique(lbl)
         lbl = lbl.astype(float)
         lbl = m.imresize(lbl, (self.img_size[0], self.img_size[1]), "nearest", mode="F")
         lbl = lbl.astype(int)
-        assert np.all(classes == np.unique(lbl))
+        #assert np.all(classes == np.unique(lbl))
+        if not np.all(classes == np.unique(lbl)):
+            print("WARN: resizing labels yielded fewer classes")
+        if not np.all(np.unique(lbl) < self.n_classes):
+            raise ValueError("Segmentation map contained invalid class value: {}. There should only be {} classes.".format(np.max(lbl), self.n_classes))
 
         img = torch.from_numpy(img).float()
         lbl = torch.from_numpy(lbl).long()
         return img, lbl
 
+    def load_index_mapping(self, mapFromADE_file_path='mapFromADE.txt'): # 150 classes
+        mapFromADE_file = open(os.path.join(os.path.split(__file__)[0], mapFromADE_file_path), 'r')
+        index_mapping = np.empty((0, 2))
+        for i, line in enumerate(mapFromADE_file.readlines()):
+            index_mapping = np.vstack([index_mapping, (int(line.split()[0]), int(line.split()[1]))]) # (new_index, original_index)
+        return index_mapping
+
     def encode_segmap(self, mask):
         # Refer : http://groups.csail.mit.edu/vision/datasets/ADE20K/code/loadAde20K.m
+        #         https://github.com/CSAILVision/sceneparsing/blob/master/convertFromADE/convertFromADE.m
+        index_mapping = self.load_index_mapping()
+
         mask = mask.astype(int)
         label_mask = np.zeros((mask.shape[0], mask.shape[1]))
-        label_mask = (mask[:, :, 0] / 10.0) * 256 + mask[:, :, 1]
-        return np.array(label_mask, dtype=np.uint8)
+        label_mask = (mask[:, :, 0] // 10.0) * 256 + mask[:, :, 1]
+
+        # Map to the top 150 classes (1 ~ 150)
+        label_output = np.zeros_like(label_mask)
+        for l in np.unique(label_mask):
+            if l in index_mapping[:, 1]:
+                label_output[label_mask == l] = index_mapping[index_mapping[:, 1] == l, 0]
+        return np.array(label_output, dtype=np.uint8)
 
     def decode_segmap(self, temp, plot=False):
         # TODO:(@meetshah1995)
